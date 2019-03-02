@@ -1,2 +1,4 @@
-# PyNSP (Python Neuronal Signal Processing Tools)
-### Version: 0.2.1
+# Parallel Execution
+### Version: 0.0.1
+
+- Command line parallel execution helper module

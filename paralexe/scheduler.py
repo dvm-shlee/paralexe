@@ -201,7 +201,7 @@ class Scheduler(object):
                 m.append('Status:\n{}'.format(state))
             else:
                 if len(self.__succeeded_steps) == self.__num_steps:
-                    m.append('\tFinished')
+                    state = '\tFinished'
                 elif len(self.__succeeded_steps) < self.__num_steps:
                     state = []
                     if len(self.__failed_steps) > 0:

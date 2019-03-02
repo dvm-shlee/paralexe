@@ -5,6 +5,7 @@ from .worker import Worker
 from .executor import Executor
 from .rsubprocess import Ropen
 
+__version__ = '0.0.1'
 __all__ = ['Scheduler', 'Manager', 'Worker', 'Executor', 'Ropen']
 
 # Worker execute Executor
