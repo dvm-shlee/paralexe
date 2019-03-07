@@ -26,14 +26,18 @@ class Executor(object):
         # If client obj is not input, use subprocess
         if self._client is None:
             from subprocess import PIPE, Popen
+            from io import BytesIO
             import shlex
-            self._proc = Popen(shlex.split(self._cmd),
+            proc = Popen(shlex.split(self._cmd),
                                # stdin=PIPE,   # Executor not use stdin, activate later when it becomes available
                                stdin=None,
                                stdout=PIPE,
                                stderr=PIPE)
 
-            self._proc.communicate()
+            stdout, stderr = proc.communicate()
+            self._stdout = BytesIO(stdout)
+            self._stderr = BytesIO(stderr)
+
         # If client obj is input, use remote process instead
         else:
             from .rsubprocess import Ropen
@@ -63,17 +67,26 @@ class Executor(object):
     @property
     def stdin(self):
         """stdin, will always return None"""
-        return self.proc.stdin
+        if self._client is None:
+            return None
+        else:
+            return self.proc.stdin
 
     @property
     def stdout(self):
         """stdout, PIPE object"""
-        return self.proc.stdout
+        if self._client is None:
+            return self._stdout
+        else:
+            return self.proc.stdout
 
     @property
     def stderr(self):
         """stderr, PIPE object"""
-        return self.proc.stderr
+        if self._client is None:
+            return self._stdout
+        else:
+            return self.proc.stderr
 
     @property
     def pid(self):
