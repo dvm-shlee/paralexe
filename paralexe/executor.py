@@ -32,6 +32,8 @@ class Executor(object):
                                stdin=None,
                                stdout=PIPE,
                                stderr=PIPE)
+
+            self._proc.communicate()
         # If client obj is input, use remote process instead
         else:
             from .rsubprocess import Ropen
