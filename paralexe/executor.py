@@ -10,12 +10,14 @@ class Executor(object):
     Todo:
         Update docstrings. Best practice are made on Manager class
     """
-
+    __wildcards = "?*%$#"
     def __init__(self, cmd, client=None):
         self._cmd = cmd
         self._client = client
         self._interface = None
+        self._rcode = None
         self._proc = None
+        self.exit_code = None
         if client is None:
             import psutil
             self._interface = psutil
@@ -28,22 +30,30 @@ class Executor(object):
             from subprocess import PIPE, Popen
             from io import BytesIO
             import shlex
-            proc = Popen(shlex.split(self._cmd),
-                               # stdin=PIPE,   # Executor not use stdin, activate later when it becomes available
-                               stdin=None,
-                               stdout=PIPE,
-                               stderr=PIPE)
-
-            stdout, stderr = proc.communicate()
-            self._stdout = BytesIO(stdout)
-            self._stderr = BytesIO(stderr)
+            try:
+                if any(w in self._cmd for w in self.__wildcards):
+                    proc = Popen(self._cmd, stdout=PIPE, stderr=PIPE, shell=True)
+                else:
+                    proc = Popen(shlex.split(self._cmd), stdout=PIPE, stderr=PIPE)
+                (stdout, stderr)  = proc.communicate()
+                self._stdout = BytesIO(stdout)
+                self._stderr = BytesIO(stderr)
+                self._rcode = proc.returncode
+            except OSError as e:
+                self._stdout = BytesIO(''.encode('ascii'))
+                self._stderr = BytesIO(e.strerror.encode('ascii'))
+                self._rcode = e.errno
 
         # If client obj is input, use remote process instead
-        else:
+        else: # TODO: remote client execution is not working
             from .rsubprocess import Ropen
             self._proc = Ropen(self._cmd,
                                client=self._client)
-
+            self._stdout = self._proc.stdout
+            self._stderr = self._proc.stderr
+            self._rcode = self._proc.returncode
+        if self._rcode == None: # TODO: for debugging
+            raise Exception
 
     @property
     def client(self):
@@ -67,26 +77,21 @@ class Executor(object):
     @property
     def stdin(self):
         """stdin, will always return None"""
-        if self._client is None:
-            return None
-        else:
-            return self.proc.stdin
+        return None
 
     @property
     def stdout(self):
-        """stdout, PIPE object"""
-        if self._client is None:
-            return self._stdout
-        else:
-            return self.proc.stdout
+        """stdout, ByteIO object"""
+        return self._stdout
 
     @property
     def stderr(self):
-        """stderr, PIPE object"""
-        if self._client is None:
-            return self._stdout
-        else:
-            return self.proc.stderr
+        """stderr, ByteIO object"""
+        return self._stderr
+
+    @property
+    def rcode(self):
+        return self._rcode
 
     @property
     def pid(self):

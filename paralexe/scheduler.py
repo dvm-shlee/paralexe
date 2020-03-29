@@ -15,7 +15,7 @@ class Scheduler(object):
         stderr (dict): collection of stderr from workers after execution.
         stdout (dict): collection of stdout from workers after execution.
     """
-    def __init__(self, workers=None, n_threads=None):
+    def __init__(self, workers=None, n_threads=None, label=None):
         """
         Args:
             workers (dict or list): priority:list(workers)
@@ -27,9 +27,14 @@ class Scheduler(object):
         self.__queues_labels = dict()
         self.__background_binder = None
         self.__n_threads = n_threads
+        self._submitted = False
 
         if workers is not None:
-            self.queue(workers)
+            self.queue(workers, label=label)
+
+    @property
+    def labels(self):
+        return sorted(self.__queues_labels.keys())
 
     def submit(self, mode='foreground', use_label=False):
         """Submit schedule
@@ -37,7 +42,7 @@ class Scheduler(object):
         Args:
             mode (str): run process on Thread if 'background', else running foreground.
         """
-
+        self._submitted = True
         def workflow():
             """Internal function that submitting jobs to Thread object
             The outputs from each worker are collected during running this function"""
@@ -65,13 +70,15 @@ class Scheduler(object):
                         self.__total_num_of_workers[order] = n_work
                         workers = self.__queues[order]
 
+                        # TODO: to catch the error related to the failed workers (when worker raise an exception)
                         for id, rcode, output in pool.imap_unordered(self.request, workers):
-                            # to catch the error related to the failed workers (when worker raise an exception)
                             if rcode == 1:
                                 self.__failed_workers[order].append(id)
                             elif rcode == 0:
                                 self.__succeeded_workers[order].append(id)
                             else:
+                                import sys
+                                print('unidentified return code: {}'.format(rcode), file=sys.stderr)
                                 raise Exception
                             if use_label is True:
                                 label = self.__queues_labels[order]
@@ -156,11 +163,11 @@ class Scheduler(object):
             m = []
             zfill = len(str(self.__num_steps))
             m.append('outline')
-            m.append('\t\tSummery')
+            m.append('\t** Summery')
             m.append('outline')
             m.append('Total number of steps:\t\t{}'.format(self.__num_steps))
             if len(self.__succeeded_steps) > 0:
-                m.append('- Succeeded steps:\t\t\t{}'.format(len(self.__succeeded_steps)))
+                m.append('- Succeeded steps:\t\t{}'.format(len(self.__succeeded_steps)))
             if len(self.__incomplete_steps) > 0:
                 m.append('- Incompleted steps:\t\t{}'.format(len(self.__incomplete_steps)))
             if len(self.__failed_steps) > 0:
@@ -178,7 +185,7 @@ class Scheduler(object):
                     if len(self.__succeeded_workers[s]) > 0:
                         m.append('\t- Succeeded workers: \t{}'.format(len(self.__succeeded_workers[s])))
                     if len(self.__failed_workers[s]) > 0:
-                        m.append('\t- Failed workers: \t\t{}'.format(len(self.__failed_workers[s])))
+                        m.append('\t- Failed workers: \t{}'.format(len(self.__failed_workers[s])))
                 else:
                     m.append('space')
                     m.append('{}\n- Not ready'.format(label))
@@ -223,7 +230,7 @@ class Scheduler(object):
                     m[i] = outline
         else:
             m = ['Empty schedule...']
-        return '\n'.join(m)
+        print('\n'.join(m))
 
     def queue(self, workers, priority=None, label=None):
         """Queue the input list of workers"""
@@ -273,12 +280,12 @@ class Scheduler(object):
             else:
                 priority = max(self.__queues.keys()) + 1
 
-        from .worker import Worker
+        from .worker import Worker, FuncWorker
 
         # Check if the inputs has hierarchy works.
         if isinstance(workers, list):
             for ipt in workers:
-                if not isinstance(ipt, Worker):
+                if not any([isinstance(ipt, Worker), isinstance(ipt, FuncWorker)]):
                     raise Exception
             self.__queues_labels[priority] = label
             return {priority:workers}
@@ -334,4 +341,6 @@ class Scheduler(object):
         return self.__stderr_collector
 
     def __repr__(self):
-        return self.summary()
+        return 'Scheduled Job:{}::{}'.format(self.__num_steps,
+                                             'Completed' if self.__num_steps \
+                                                 else 'Issued' if len(self.__incomplete_steps) > 0 else 'Incompleted')

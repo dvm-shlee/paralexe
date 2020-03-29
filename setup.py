@@ -25,6 +25,7 @@ setup(name='Paralexe',
       license='GNLv3',
       packages=find_packages(),
       install_requires=['tqdm',
+                        'psutil',
                        ],
       # scripts=['',
       #         ],
@@ -49,4 +50,3 @@ setup(name='Paralexe',
       keywords = 'Python Neural-Signal Processing'
 
      )
-

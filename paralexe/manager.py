@@ -39,6 +39,7 @@ class Manager(object):
     def __init__(self, client=None):
         self.__init_attributed()
         self.__client = client
+        self.__schd = None
 
     # methods
     def set_cmd(self, cmd):
@@ -48,6 +49,16 @@ class Manager(object):
             cmd (str): Command
         """
         self.__cmd = cmd
+
+    def set_errterm(self, error_term):
+        """This method set the term for indicating error condition from stderr
+        """
+        if isinstance(error_term, list):
+            self.__errterm = error_term
+        elif isinstance(error_term, str):
+            self.__errterm = [error_term]
+        else:
+            raise TypeError
 
     def set_arg(self, label, args, metaupdate=False):
         """Set arguments will replace the decorated place holder in command.
@@ -90,9 +101,10 @@ class Manager(object):
                     self.meta[i] = None
 
     def deploy_jobs(self):
+        self.deployed = True
         return JobAllocator(self).allocation()
 
-    def schedule(self, scheduler, priority=None, label=None):
+    def schedule(self, scheduler=None, priority=None, label=None, n_thread=None):
         """Schedule the jobs regarding the command user set to this Manager object.
         To execute the command, the Scheduler object that is linked, need to submit the jobs.
 
@@ -103,8 +115,19 @@ class Manager(object):
             priority(int):  if given, schedule the jobs with given priority. lower the prior.
             label(str)      if given, use the label to index each step instead priority.
         """
-        workers = self.deploy_jobs()
-        scheduler.queue(workers, priority=priority, label=label)
+        from .scheduler import Scheduler
+        if scheduler is None:
+            self.__schd = Scheduler(n_threads=n_thread)
+        elif isinstance(scheduler, Scheduler):
+            self.__schd = scheduler
+        else:
+            raise Exception
+        self._workers = self.deploy_jobs()
+        self.__schd.queue(self._workers, priority=priority, label=label)
+
+    def submit(self, mode='foreground', use_label=False):
+        if self.__schd is not None:
+            self.__schd.submit(mode=mode, use_label=use_label)
 
     # hidden methods for internal processing
     def __init_attributed(self):
@@ -114,7 +137,9 @@ class Manager(object):
         self.__cmd = None
         self.__decorator = ['*[', ']']
         self.__n_workers = 0
-        self.__client = None
+        self.__errterm = None
+        self._workers = None
+        self.deployed = False
 
     def __inspection(self, args):
         """Inspect the integrity of the input arguments.
@@ -176,6 +201,23 @@ class Manager(object):
                     self.__n_workers = len(args)
                     return args
 
+    def audit(self):
+        if self.deployed:
+            msg = []
+            for w in self._workers:
+                msg.append('WorkerID-{}'.format(w.id))
+                msg.append('  Command: "{}"'.format(w.cmd))
+                try:
+                    stdout = '\n   '.join(w.output[0]) if isinstance(w.output[0], list) else None
+                    stderr = '\n   '.join(w.output[1]) if isinstance(w.output[1], list) else None
+                    msg.append('  ReturnCode: {}'.format(w._rcode))
+                    msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
+                except:
+                    msg.append('  *[ Scheduled job is not executed yet. ]\n')
+            if len(msg) == 0:
+                print('*[ No workers deployed. ]*')
+            print('\n'.join(msg))
+
     # properties
     @property
     def meta(self):
@@ -192,6 +234,10 @@ class Manager(object):
     @property
     def args(self):
         return self.__args
+
+    @property
+    def errterm(self):
+        return self.__errterm
 
     @property
     def decorator(self):
@@ -217,6 +263,17 @@ class Manager(object):
     @property
     def client(self):
         return self.__client
+
+    @property
+    def schd(self):
+        return self.__schd
+
+    def summary(self):
+        return self.schd.summary()
+
+    def __repr__(self):
+        return 'Deployed Workers:[{}]{}'.format(self.__n_workers,
+                                                '::Submitted' if self.__schd._submitted else '')
 
 
 class JobAllocator(object):
@@ -279,5 +336,170 @@ class JobAllocator(object):
         for i, cmd in cmds.items():
             list_of_workers.append(Worker(id=i,
                                           executor=Executor(cmd, self._mng.client),
-                                          meta=self._mng.meta[i]))
+                                          meta=self._mng.meta[i],
+                                          error_term=self._mng.errterm))
+        return list_of_workers
+
+
+class FuncManager(object):
+    def __init__(self):
+        self.__init_attributed()
+        self.__schd = None
+
+    def __init_attributed(self):
+        # All attributes are twice underbarred in order to not show up.
+        self.__args = dict()
+        self.__func = None
+        self.__n_workers = 0
+        self._workers = None
+        self.deployed = False
+
+    def set_func(self, func):
+        self._func = func
+
+    def set_arg(self, label, args):
+        if self._func is None:
+            # the cmd property need to be defined prior to run this method.
+            raise Exception()
+
+        # inspect the integrity of input argument.
+        self.__args[label] = self.__inspection(args)
+
+        # update arguments to correct numbers.
+        for k, v in self.__args.items():
+            if not isinstance(v, list):
+                self.__args[k] = [v] * self.__n_workers
+            else:
+                self.__args[k] = v
+
+    def __inspection(self, args):
+        # function to check single argument case
+        def if_single_arg(arg):
+            if isinstance(arg, Iterable):
+                if not isinstance(arg, str):
+                    raise Exception
+
+        # If there is no preset argument
+        if len(self.__args.keys()) == 0:
+            # list dtype
+            if isinstance(args, list):
+                self.__n_workers = len(args)
+
+            # single value
+            else:
+                # Only single value can be assign as argument if it is not list object
+                if_single_arg(args)
+                self.__n_workers = 1
+            return args
+
+        # If there were any preset argument
+        else:
+            # is single argument, single argument is allowed.
+            if not isinstance(args, list):
+                if_single_arg(args)
+                return args
+            else:
+                # filter only list arguments.
+                num_args = [len(a) for a in self.__args.values() if isinstance(a, list)]
+
+                # check all arguments as same length
+                if not all([n == max(num_args) for n in num_args]):
+                    # the number of each preset argument is different.
+                    raise Exception
+
+                # the number of arguments are same as others preset
+                if len(args) != max(num_args):
+                    raise Exception
+                else:
+                    self.__n_workers = len(args)
+                    return args
+
+    def deploy_jobs(self):
+        self.deployed = True
+        return FuncAllocator(self).allocation()
+
+    def schedule(self, scheduler=None, priority=None, label=None, n_thread=None):
+        from .scheduler import Scheduler
+        if scheduler is None:
+            self.__schd = Scheduler(n_threads=n_thread)
+        elif isinstance(scheduler, Scheduler):
+            self.__schd = scheduler
+        else:
+            raise Exception
+        self._workers = self.deploy_jobs()
+        self.__schd.queue(self._workers, priority=priority, label=label)
+
+    def submit(self, mode='foreground', use_label=False):
+        if self.__schd is not None:
+            self.__schd.submit(mode=mode, use_label=use_label)
+
+    def audit(self):
+        if self.deployed:
+            msg = []
+            for w in self._workers:
+                msg.append('WorkerID-{}'.format(w.id))
+                msg.append('  Func: "{}"'.format(w.func))
+                try:
+                    stdout = '\n   '.join(w.output[0]) if isinstance(w.output[0], list) else None
+                    stderr = '\n   '.join(w.output[1]) if isinstance(w.output[1], list) else None
+                    msg.append('  ReturnCode: {}'.format(w._rcode))
+                    msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
+                except:
+                    msg.append('  *[ Scheduled job is not executed yet. ]\n')
+            if len(msg) == 0:
+                print('*[ No workers deployed. ]*')
+            print('\n'.join(msg))
+
+    @property
+    def n_workers(self):
+        return self.__n_workers
+
+    @property
+    def func(self):
+        return self._func.__code__.co_name
+
+    @property
+    def args(self):
+        return self.__args
+
+    @property
+    def schd(self):
+        return self.__schd
+
+    def summary(self):
+        return self.schd.summary()
+
+    def __repr__(self):
+        return 'Deployed Workers:[{}]{}'.format(self.__n_workers,
+                                                '::Submitted' if self.__schd._submitted else '')
+
+
+class FuncAllocator(object):
+    def __init__(self, manager):
+        self._mng = manager
+
+    def __inspection_func(self, args, keywords):
+        if set(args.keys()) != set(keywords):
+            raise Exception
+
+    def __get_kwargslist(self):
+        args = self._mng.args
+        n_args = self._mng._func.__code__.co_argcount
+        keywords = self._mng._func.__code__.co_varnames[:n_args]
+        keywords = [k for k in keywords if k not in ['stdout', 'stderr']]
+        self.__inspection_func(args, keywords)
+        kwargs = dict()
+        for i in range(self._mng.n_workers):
+            kwargs[i] = {k: args[k][i] for k in keywords}
+        return kwargs
+
+    def allocation(self):
+        from .worker import FuncWorker
+        kwargs = self.__get_kwargslist()
+
+        list_of_workers = []
+        for i, k in kwargs.items():
+            list_of_workers.append(FuncWorker(id=i,
+                                              funcobj=self._mng._func,
+                                              kwargs=k))
         return list_of_workers
