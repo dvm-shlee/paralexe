@@ -22,19 +22,23 @@ class Scheduler(object):
             n_threads (int):
         """
         # Initiate counters
-        self.__reset_counter()
-        self.__queues = None
-        self.__queues_labels = dict()
-        self.__background_binder = None
-        self.__n_threads = n_threads
+        self._reset_counter()
+        self._queues = None
+        self._queues_labels = dict()
+        self._background_binder = None
+        self._n_threads = n_threads
         self._submitted = False
 
         if workers is not None:
             self.queue(workers, label=label)
 
     @property
+    def submitted(self):
+        return self._submitted
+
+    @property
     def labels(self):
-        return sorted(self.__queues_labels.keys())
+        return sorted(self._queues_labels.keys())
 
     def submit(self, mode='foreground', use_label=False):
         """Submit schedule
@@ -43,20 +47,21 @@ class Scheduler(object):
             mode (str): run process on Thread if 'background', else running foreground.
         """
         self._submitted = True
+
         def workflow():
             """Internal function that submitting jobs to Thread object
             The outputs from each worker are collected during running this function"""
-            if self.__queues is not None:
-                self.__num_steps = len(self.__queues)
+            if self._queues is not None:
+                self.__num_steps = len(self._queues)
 
                 # initiate pool
-                pool = ThreadPool(self.__n_threads)
-                for order in sorted(self.__queues.keys()):
+                pool = ThreadPool(self._n_threads)
+                for order in sorted(self._queues.keys()):
                     if order in self.__succeeded_steps:
                         pass
                     else:
                         if use_label is True:
-                            label = self.__queues_labels[order]
+                            label = self._queues_labels[order]
                         else:
                             label = order
                         # Initiate counters
@@ -66,9 +71,9 @@ class Scheduler(object):
                         self.__failed_workers[order] = []
                         self.__stdout_collector[label] = dict()
                         self.__stderr_collector[label] = dict()
-                        n_work = len(self.__queues[order])
+                        n_work = len(self._queues[order])
                         self.__total_num_of_workers[order] = n_work
-                        workers = self.__queues[order]
+                        workers = self._queues[order]
 
                         # TODO: to catch the error related to the failed workers (when worker raise an exception)
                         for id, rcode, output in pool.imap_unordered(self.request, workers):
@@ -81,7 +86,7 @@ class Scheduler(object):
                                 print('unidentified return code: {}'.format(rcode), file=sys.stderr)
                                 raise Exception
                             if use_label is True:
-                                label = self.__queues_labels[order]
+                                label = self._queues_labels[order]
                             else:
                                 label = order
                             self.__stdout_collector[label][id] = output[0]
@@ -102,11 +107,12 @@ class Scheduler(object):
         # Pool will be staying on background
         elif mode == 'background':
             import threading
-            self.__background_binder = threading.Thread(target=workflow, args=())
-            self.__background_binder.daemon = True
-            self.__background_binder.start()
+            self._background_binder = threading.Thread(target=workflow, args=())
+            self._background_binder.daemon = True
+            self._background_binder.start()
 
-    def request(self, worker):
+    @staticmethod
+    def request(worker):
         """Method for requesting execution to worker
 
         Args:
@@ -124,26 +130,26 @@ class Scheduler(object):
 
     def is_alive(self):
         """Check if the process is still alive if it running on background"""
-        if self.__background_binder is not None:
-            return self.__background_binder.is_alive()
+        if self._background_binder is not None:
+            return self._background_binder.is_alive()
         else:
             return None
 
     def join(self):
         """If running on background, attract out to foreground"""
         if self.is_alive():
-            self.__background_binder.join()
+            self._background_binder.join()
 
     def check_progress(self):
         """Helper method to check overall progression"""
 
-        if self.__queues is not None:
+        if self._queues is not None:
             total_bar = len(self.__succeeded_steps) + len(self.__failed_steps)
             tqdm(total=self.__num_steps, desc='__Total__', initial=total_bar, postfix=None)
 
-            for priority in self.__queues.keys():
-                if len(self.__queues_labels) != 0:
-                    label = 'Step::{}'.format(self.__queues_labels[priority])
+            for priority in self._queues.keys():
+                if len(self._queues_labels) != 0:
+                    label = 'Step::{}'.format(self._queues_labels[priority])
                 else:
                     label = 'priority::{}'.format(str(priority + 1).zfill(3))
                 if priority in self.__succeeded_workers.keys():
@@ -152,7 +158,7 @@ class Scheduler(object):
                          desc=label,
                          initial=sub_bar)
                 else:
-                    tqdm(total=len(self.__queues[priority]),
+                    tqdm(total=len(self._queues[priority]),
                          desc=label,
                          initial=0)
         else:
@@ -173,11 +179,11 @@ class Scheduler(object):
             if len(self.__failed_steps) > 0:
                 m.append('- Failed steps:\t\t\t{}'.format(len(self.__failed_steps)))
             # for s in range(self.__num_steps):
-            for s in self.__queues.keys():
-                if len(self.__queues_labels) == 0:
+            for s in self._queues.keys():
+                if len(self._queues_labels) == 0:
                     label = 'Step:'.format(str(s + 1).zfill(zfill))
                 else:
-                    label = 'Step::{}'.format(self.__queues_labels[s])
+                    label = 'Step::{}'.format(self._queues_labels[s])
                 if s in self.__total_num_of_workers.keys():
                     m.append('space')
                     m.append('{}\n\tNumber of workers: \t{}'.format(label,
@@ -190,7 +196,7 @@ class Scheduler(object):
                     m.append('space')
                     m.append('{}\n- Not ready'.format(label))
             m.append('space')
-            if self.__background_binder is not None:
+            if self._background_binder is not None:
                 if self.is_alive() is True:
                     state = '\tActive'
                 else:
@@ -236,13 +242,13 @@ class Scheduler(object):
         """Queue the input list of workers"""
 
         # run inspection, if the input of worker instances is list, this step change it to dictionary.
-        if self.__queues is None:
-            self.__queues = self.__inspect_inputs(workers, priority=0, label=label)
+        if self._queues is None:
+            self._queues = self._inspect_inputs(workers, priority=0, label=label)
         else:
-            workers = self.__inspect_inputs(workers, priority)
+            workers = self._inspect_inputs(workers, priority)
             self.__update_queues(workers, label)
 
-    def __inspect_inputs(self, workers, priority=None, label=None):
+    def _inspect_inputs(self, workers, priority=None, label=None):
         """Inspect the integrity of the inputs.
 
         Args:
@@ -255,8 +261,8 @@ class Scheduler(object):
         """
         label_index = None
         if label is not None:
-            if label in self.__queues_labels.values():
-                for order, l in self.__queues_labels.items():
+            if label in self._queues_labels.values():
+                for order, l in self._queues_labels.items():
                     if label is l:
                         label_index = order
             if label_index in self.__succeeded_steps:
@@ -275,10 +281,10 @@ class Scheduler(object):
                 pass
 
         if priority is None:
-            if self.__queues is None:
+            if self._queues is None:
                 priority = 0
             else:
-                priority = max(self.__queues.keys()) + 1
+                priority = max(self._queues.keys()) + 1
 
         from .worker import Worker, FuncWorker
 
@@ -287,13 +293,13 @@ class Scheduler(object):
             for ipt in workers:
                 if not any([isinstance(ipt, Worker), isinstance(ipt, FuncWorker)]):
                     raise Exception
-            self.__queues_labels[priority] = label
+            self._queues_labels[priority] = label
             return {priority:workers}
 
         # dictionary type of workers may have multiple workers list.
         elif isinstance(workers, dict):
             for p, w in workers.items():
-                self.__queues_labels[p] = label
+                self._queues_labels[p] = label
             return workers
         else:
             raise Exception
@@ -302,35 +308,35 @@ class Scheduler(object):
         """internal method to update workers into queue"""
         if len(workers) > 0:
             for priority, workers_in_priority in workers.items():
-                if priority in self.__queues.keys():
+                if priority in self._queues.keys():
                     if isinstance(workers_in_priority, list):
-                        self.__queues[priority].extend(workers_in_priority)
+                        self._queues[priority].extend(workers_in_priority)
                     else:
-                        self.__queues[priority].append(workers_in_priority)
+                        self._queues[priority].append(workers_in_priority)
                 else:
-                    self.__queues[priority] = workers_in_priority
+                    self._queues[priority] = workers_in_priority
                     if label is not None:
-                        self.__queues_labels[priority] = label
+                        self._queues_labels[priority] = label
 
-    def __reset_counter(self):
+    def _reset_counter(self):
         # counter for steps
-        self.__num_steps = 0
-        self.__succeeded_steps = []
-        self.__failed_steps = []
-        self.__incomplete_steps = []
+        self.__num_steps            = 0
+        self.__succeeded_steps      = []
+        self.__failed_steps         = []
+        self.__incomplete_steps     = []
 
         # counter for workers
         self.__total_num_of_workers = {}
-        self.__failed_workers = {}
-        self.__succeeded_workers = {}
+        self.__failed_workers       = {}
+        self.__succeeded_workers    = {}
 
         # output collector
-        self.__stdout_collector = {}
-        self.__stderr_collector = {}
+        self.__stdout_collector     = {}
+        self.__stderr_collector     = {}
 
     @property
     def queues(self):
-        return self.__queues
+        return self._queues
 
     @property
     def stdout(self):

@@ -1,4 +1,5 @@
 from collections import Iterable
+from .scheduler import Scheduler
 
 
 class Manager(object):
@@ -14,12 +15,10 @@ class Manager(object):
         The example of scheduling repeated command
 
         >>> import paralexe as pe
-        >>> sch = pe.Scheduler()
         >>> mng = pe.Manager()
         >>> mng.set_cmd('touch *[file_name]')
         >>> mng.set_arg(label='file_name', args=['a.txt', 'b.txt', 'c.txt', 'd.txt']
-        >>> mng.schedule(sch)
-        >>> sch.submit()
+        >>> mng.submit()
 
     Args:
         scheduler: Scheduler instance.
@@ -37,30 +36,39 @@ class Manager(object):
         Make the better descriptions for Errors and Exceptions.
     """
     def __init__(self, client=None):
-        self.__init_attributed()
-        self.__client = client
-        self.__schd = None
+        # private
+        self._client = client
+        self._args = dict()
+        self._meta = dict()
+        self._schd = None
+        self._cmd = None
+        self._decorator = ['*[', ']']
+        self._n_workers = 0
+        self._errterm = None
+        self._workers = None
+
+        # public
+        self.deployed = False
 
     # methods
     def set_cmd(self, cmd):
         """Set the command with place holder encapsulated with decorator.
-
         Args:
             cmd (str): Command
         """
-        self.__cmd = cmd
+        self._cmd = cmd
 
     def set_errterm(self, error_term):
         """This method set the term for indicating error condition from stderr
         """
         if isinstance(error_term, list):
-            self.__errterm = error_term
+            self._errterm = error_term
         elif isinstance(error_term, str):
-            self.__errterm = [error_term]
+            self._errterm = [error_term]
         else:
             raise TypeError
 
-    def set_arg(self, label, args, metaupdate=False):
+    def set_arg(self, label, args, update_meta=False):
         """Set arguments will replace the decorated place holder in command.
         The number of workers will have same number with the length of argument,
         which means worker will execute the command with each argument by
@@ -74,28 +82,28 @@ class Manager(object):
             label (str): label of place holder want to be replaced with given argument.
             args (:obj:'list' of :obj:'str'): the list of arguments,
                         total length of the argument must same as number of workers.
-            metaupdate (bool): Update meta information for this argument if True, else do not update.
+            update_meta (bool): Update meta information for this argument if True, else do not update.
 
         Raises:
             Exception: will be raised if the command is not set prior executing this method.
         """
-        if self.__cmd is None:
+        if self._cmd is None:
             # the cmd property need to be defined prior to run this method.
             raise Exception()
 
         # inspect the integrity of input argument.
-        self.__args[label] = self.__inspection(args)
+        self._args[label] = self._inspection(args)
 
         # update arguments to correct numbers.
-        for k, v in self.__args.items():
+        for k, v in self._args.items():
             if not isinstance(v, list):
-                self.__args[k] = [v] * self.__n_workers
+                self._args[k] = [v] * self._n_workers
             else:
-                self.__args[k] = v
+                self._args[k] = v
 
             # update meta information.
-            for i, arg in enumerate(self.__args[k]):
-                if metaupdate is True:
+            for i, arg in enumerate(self._args[k]):
+                if update_meta is True:
                     self.meta[i] = {k:arg}
                 else:
                     self.meta[i] = None
@@ -112,36 +120,25 @@ class Manager(object):
             Please refer the example in the docstring of the class to prevent conflict.
 
         Args:
+            scheduler
             priority(int):  if given, schedule the jobs with given priority. lower the prior.
             label(str)      if given, use the label to index each step instead priority.
+            n_thread
         """
-        from .scheduler import Scheduler
         if scheduler is None:
-            self.__schd = Scheduler(n_threads=n_thread)
+            self._schd = Scheduler(n_threads=n_thread)
         elif isinstance(scheduler, Scheduler):
-            self.__schd = scheduler
+            self._schd = scheduler
         else:
             raise Exception
         self._workers = self.deploy_jobs()
-        self.__schd.queue(self._workers, priority=priority, label=label)
+        self._schd.queue(self._workers, priority=priority, label=label)
 
     def submit(self, mode='foreground', use_label=False):
-        if self.__schd is not None:
-            self.__schd.submit(mode=mode, use_label=use_label)
+        if self._schd is not None:
+            self._schd.submit(mode=mode, use_label=use_label)
 
-    # hidden methods for internal processing
-    def __init_attributed(self):
-        # All attributes are twice underbarred in order to not show up.
-        self.__args = dict()
-        self.__meta = dict()
-        self.__cmd = None
-        self.__decorator = ['*[', ']']
-        self.__n_workers = 0
-        self.__errterm = None
-        self._workers = None
-        self.deployed = False
-
-    def __inspection(self, args):
+    def _inspection(self, args):
         """Inspect the integrity of the input arguments.
         This method mainly check the constancy of the number of arguments
         and the data type of given argument. Hidden method for internal using.
@@ -167,16 +164,16 @@ class Manager(object):
                     raise Exception
 
         # If there is no preset argument
-        if len(self.__args.keys()) == 0:
+        if len(self._args.keys()) == 0:
             # list dtype
             if isinstance(args, list):
-                self.__n_workers = len(args)
+                self._n_workers = len(args)
 
             # single value
             else:
                 # Only single value can be assign as argument if it is not list object
                 if_single_arg(args)
-                self.__n_workers = 1
+                self._n_workers = 1
             return args
 
         # If there were any preset argument
@@ -187,7 +184,7 @@ class Manager(object):
                 return args
             else:
                 # filter only list arguments.
-                num_args = [len(a) for a in self.__args.values() if isinstance(a, list)]
+                num_args = [len(a) for a in self._args.values() if isinstance(a, list)]
 
                 # check all arguments as same length
                 if not all([n == max(num_args) for n in num_args]):
@@ -198,7 +195,7 @@ class Manager(object):
                 if len(args) != max(num_args):
                     raise Exception
                 else:
-                    self.__n_workers = len(args)
+                    self._n_workers = len(args)
                     return args
 
     def audit(self):
@@ -221,27 +218,27 @@ class Manager(object):
     # properties
     @property
     def meta(self):
-        return self.__meta
+        return self._meta
 
     @property
     def n_workers(self):
-        return self.__n_workers
+        return self._n_workers
 
     @property
     def cmd(self):
-        return self.__cmd
+        return self._cmd
 
     @property
     def args(self):
-        return self.__args
+        return self._args
 
     @property
     def errterm(self):
-        return self.__errterm
+        return self._errterm
 
     @property
     def decorator(self):
-        return self.__decorator
+        return self._decorator
 
     @decorator.setter
     def decorator(self, decorator):
@@ -256,24 +253,24 @@ class Manager(object):
         if decorator is not None:
             # inspect decorator datatype
             if isinstance(decorator, list) and len(decorator) == 2:
-                self.__decorator = decorator
+                self._decorator = decorator
             else:
                 raise Exception
 
     @property
     def client(self):
-        return self.__client
+        return self._client
 
     @property
     def schd(self):
-        return self.__schd
+        return self._schd
 
     def summary(self):
         return self.schd.summary()
 
     def __repr__(self):
-        return 'Deployed Workers:[{}]{}'.format(self.__n_workers,
-                                                '::Submitted' if self.__schd._submitted else '')
+        return 'Deployed Workers:[{}]{}'.format(self._n_workers,
+                                                '::Submitted' if self._schd.submitted else '')
 
 
 class JobAllocator(object):
@@ -291,34 +288,35 @@ class JobAllocator(object):
     def __init__(self, manager):
         self._mng = manager
 
-    def __convert_cmd_and_retrieve_placeholder(self, command):
+    def _convert_cmd_and_retrieve_placeholder(self, command):
         """Hidden method to retrieve name of place holder from the command"""
         import re
-        prefix, surfix = self._mng.decorator
+        prefix, suffix = self._mng.decorator
         raw_prefix = ''.join([r'\{}'.format(chr) for chr in prefix])
-        raw_surfix = ''.join([r'\{}'.format(chr) for chr in surfix])
+        raw_suffix = ''.join([r'\{}'.format(chr) for chr in suffix])
 
         # The text
-        p = re.compile(r"{0}[^{0}{1}]+{1}".format(raw_prefix, raw_surfix))
-        place_holders = set([obj[len(prefix):-len(surfix)] for obj in p.findall(command)])
+        p = re.compile(r"{0}[^{0}{1}]+{1}".format(raw_prefix, raw_suffix))
+        place_holders = set([obj[len(prefix):-len(suffix)] for obj in p.findall(command)])
 
-        p = re.compile(r"{}({}){}".format(raw_prefix,'|'.join(place_holders), raw_surfix))
+        p = re.compile(r"{}({}){}".format(raw_prefix,'|'.join(place_holders), raw_suffix))
         new_command = p.sub(r'{\1}', command)
 
         return new_command, place_holders
 
-    def __get_cmdlist(self):
+    def _get_cmdlist(self):
         """Hidden method to generate list of command need to be executed by Workers"""
 
         args = self._mng.args
-        cmd, place_holders = self.__convert_cmd_and_retrieve_placeholder(self._mng.cmd)
-        self.__inspection_cmd(args, place_holders)
+        cmd, place_holders = self._convert_cmd_and_retrieve_placeholder(self._mng.cmd)
+        self._inspection_cmd(args, place_holders)
         cmds = dict()
         for i in range(self._mng.n_workers):
             cmds[i] = cmd.format(**{p: args[p][i] for p in place_holders})
         return cmds
 
-    def __inspection_cmd(self, args, place_holders):
+    @staticmethod
+    def _inspection_cmd(args, place_holders):
         """Hidden method to inspect command.
         There is the chance that the place holder user provided is not match with label
         in argument, this method check the integrity of the given relationship between cmd and args
@@ -331,7 +329,7 @@ class JobAllocator(object):
         from .executor import Executor
         from .worker import Worker
 
-        cmds = self.__get_cmdlist()
+        cmds = self._get_cmdlist()
         list_of_workers = []
         for i, cmd in cmds.items():
             list_of_workers.append(Worker(id=i,
@@ -343,15 +341,14 @@ class JobAllocator(object):
 
 class FuncManager(object):
     def __init__(self):
-        self.__init_attributed()
-        self.__schd = None
-
-    def __init_attributed(self):
-        # All attributes are twice underbarred in order to not show up.
-        self.__args = dict()
-        self.__func = None
-        self.__n_workers = 0
+        # private
+        self._schd = None
+        self._args = dict()
+        self._func = None
+        self._n_workers = 0
         self._workers = None
+
+        # public
         self.deployed = False
 
     def set_func(self, func):
@@ -363,16 +360,16 @@ class FuncManager(object):
             raise Exception()
 
         # inspect the integrity of input argument.
-        self.__args[label] = self.__inspection(args)
+        self._args[label] = self._inspection(args)
 
         # update arguments to correct numbers.
-        for k, v in self.__args.items():
+        for k, v in self._args.items():
             if not isinstance(v, list):
-                self.__args[k] = [v] * self.__n_workers
+                self._args[k] = [v] * self._n_workers
             else:
-                self.__args[k] = v
+                self._args[k] = v
 
-    def __inspection(self, args):
+    def _inspection(self, args):
         # function to check single argument case
         def if_single_arg(arg):
             if isinstance(arg, Iterable):
@@ -380,16 +377,16 @@ class FuncManager(object):
                     raise Exception
 
         # If there is no preset argument
-        if len(self.__args.keys()) == 0:
+        if len(self._args.keys()) == 0:
             # list dtype
             if isinstance(args, list):
-                self.__n_workers = len(args)
+                self._n_workers = len(args)
 
             # single value
             else:
                 # Only single value can be assign as argument if it is not list object
                 if_single_arg(args)
-                self.__n_workers = 1
+                self._n_workers = 1
             return args
 
         # If there were any preset argument
@@ -400,7 +397,7 @@ class FuncManager(object):
                 return args
             else:
                 # filter only list arguments.
-                num_args = [len(a) for a in self.__args.values() if isinstance(a, list)]
+                num_args = [len(a) for a in self._args.values() if isinstance(a, list)]
 
                 # check all arguments as same length
                 if not all([n == max(num_args) for n in num_args]):
@@ -411,7 +408,7 @@ class FuncManager(object):
                 if len(args) != max(num_args):
                     raise Exception
                 else:
-                    self.__n_workers = len(args)
+                    self._n_workers = len(args)
                     return args
 
     def deploy_jobs(self):
@@ -421,17 +418,17 @@ class FuncManager(object):
     def schedule(self, scheduler=None, priority=None, label=None, n_thread=None):
         from .scheduler import Scheduler
         if scheduler is None:
-            self.__schd = Scheduler(n_threads=n_thread)
+            self._schd = Scheduler(n_threads=n_thread)
         elif isinstance(scheduler, Scheduler):
-            self.__schd = scheduler
+            self._schd = scheduler
         else:
             raise Exception
         self._workers = self.deploy_jobs()
-        self.__schd.queue(self._workers, priority=priority, label=label)
+        self._schd.queue(self._workers, priority=priority, label=label)
 
     def submit(self, mode='foreground', use_label=False):
-        if self.__schd is not None:
-            self.__schd.submit(mode=mode, use_label=use_label)
+        if self._schd is not None:
+            self._schd.submit(mode=mode, use_label=use_label)
 
     def audit(self):
         if self.deployed:
@@ -442,7 +439,7 @@ class FuncManager(object):
                 try:
                     stdout = '\n   '.join(w.output[0]) if isinstance(w.output[0], list) else None
                     stderr = '\n   '.join(w.output[1]) if isinstance(w.output[1], list) else None
-                    msg.append('  ReturnCode: {}'.format(w._rcode))
+                    msg.append('  ReturnCode: {}'.format(w.rcode))
                     msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
                 except:
                     msg.append('  *[ Scheduled job is not executed yet. ]\n')
@@ -452,7 +449,7 @@ class FuncManager(object):
 
     @property
     def n_workers(self):
-        return self.__n_workers
+        return self._n_workers
 
     @property
     def func(self):
@@ -460,34 +457,35 @@ class FuncManager(object):
 
     @property
     def args(self):
-        return self.__args
+        return self._args
 
     @property
     def schd(self):
-        return self.__schd
+        return self._schd
 
     def summary(self):
         return self.schd.summary()
 
     def __repr__(self):
-        return 'Deployed Workers:[{}]{}'.format(self.__n_workers,
-                                                '::Submitted' if self.__schd._submitted else '')
+        return 'Deployed Workers:[{}]{}'.format(self._n_workers,
+                                                '::Submitted' if self._schd.submitted else '')
 
 
 class FuncAllocator(object):
     def __init__(self, manager):
         self._mng = manager
 
-    def __inspection_func(self, args, keywords):
+    @staticmethod
+    def _inspection_func(args, keywords):
         if set(args.keys()) != set(keywords):
             raise Exception
 
-    def __get_kwargslist(self):
+    def _get_kwargslist(self):
         args = self._mng.args
-        n_args = self._mng._func.__code__.co_argcount
-        keywords = self._mng._func.__code__.co_varnames[:n_args]
+        n_args = self._mng.func.__code__.co_argcount
+        keywords = self._mng.func.__code__.co_varnames[:n_args]
         keywords = [k for k in keywords if k not in ['stdout', 'stderr']]
-        self.__inspection_func(args, keywords)
+        self._inspection_func(args, keywords)
         kwargs = dict()
         for i in range(self._mng.n_workers):
             kwargs[i] = {k: args[k][i] for k in keywords}
@@ -495,11 +493,11 @@ class FuncAllocator(object):
 
     def allocation(self):
         from .worker import FuncWorker
-        kwargs = self.__get_kwargslist()
+        kwargs = self._get_kwargslist()
 
         list_of_workers = []
         for i, k in kwargs.items():
             list_of_workers.append(FuncWorker(id=i,
-                                              funcobj=self._mng._func,
+                                              funcobj=self._mng.func,
                                               kwargs=k))
         return list_of_workers

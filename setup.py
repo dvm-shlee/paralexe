@@ -21,11 +21,11 @@ setup(name='Paralexe',
       description='Parallel Execution',
       author=__author__,
       author_email=__email__,
-      url=None,
+      url='https://github.com/dvm-shlee/paralexe',
       license='GNLv3',
       packages=find_packages(),
       install_requires=['tqdm',
-                        'psutil',
+                        'psutil>=5.7.0',
                        ],
       # scripts=['',
       #         ],
@@ -34,7 +34,7 @@ setup(name='Paralexe',
             #  3 - Alpha
             #  4 - Beta
             #  5 - Production/Stable
-            'Development Status :: 3 - Alpha',
+            'Development Status :: 4 - Beta',
 
             # Indicate who your project is intended for
             'Framework :: Jupyter',

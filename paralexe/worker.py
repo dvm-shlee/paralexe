@@ -1,3 +1,6 @@
+from io import StringIO
+
+
 class Worker(object):
     """The helper class to execute command and store related meta information.
 
@@ -32,7 +35,7 @@ class Worker(object):
         self._meta = meta
         self._executor = executor
         self._cmd = executor.cmd
-        self.__output = None
+        self._output = None
         self._error_term = error_term
         self._rcode = None
 
@@ -44,9 +47,9 @@ class Worker(object):
         exct = self._executor
         exct.execute()
 
-        stdout = self.__pars_output(exct.stdout.read())
-        stderr = self.__pars_output(exct.stderr.read())
-        self.__output = (stdout, stderr)
+        stdout = self._pars_output(exct.stdout.read())
+        stderr = self._pars_output(exct.stderr.read())
+        self._output = (stdout, stderr)
         self._rcode = exct.rcode
 
         def check_error(line):
@@ -61,7 +64,7 @@ class Worker(object):
                     return 1
                 else:
                     self._rcode = 0
-                    self.__output = (stderr, stdout)
+                    self._output = (stderr, stdout)
                     return 0
 
         if self._rcode > 0:
@@ -69,7 +72,8 @@ class Worker(object):
         else:
             return 0
 
-    def __pars_output(self, bytedata):
+    @staticmethod
+    def _pars_output(bytedata):
         """Decode byte to utf-8 for stdout"""
         if len(bytedata) is 0:
             return None
@@ -95,36 +99,40 @@ class Worker(object):
 
     @property
     def output(self):
-        return self.__output
+        return self._output
+
+    @property
+    def rcode(self):
+        return self._rcode
 
 
 class FuncWorker(object):
     def __init__(self, id, funcobj, kwargs):
+        # private
         self._id = id
         self._kwargs = kwargs
         self._func = funcobj
-
-        from io import StringIO
-        self.__stdout = StringIO()
-        self.__stderr = StringIO()
-        self.__output = None
+        self._stdout = StringIO()
+        self._stderr = StringIO()
+        self._output = None
         self._rcode = None
 
     def run(self):
         try:
-            self._rcode = self._func(stdout=self.__stdout,
-                                     stderr=self.__stderr,
+            self._rcode = self._func(stdout=self._stdout,
+                                     stderr=self._stderr,
                                      **self._kwargs)
         except Exception as e:
-            self.__stderr.write(str(e))
+            self._stderr.write(str(e))
             self._rcode = 1
 
-        stdout = self.__pars_output(self.__stdout.getvalue())
-        stderr = self.__pars_output(self.__stderr.getvalue())
-        self.__output = (stdout, stderr)
+        stdout = self._pars_output(self._stdout.getvalue())
+        stderr = self._pars_output(self._stderr.getvalue())
+        self._output = (stdout, stderr)
         return self._rcode
 
-    def __pars_output(self, string):
+    @staticmethod
+    def _pars_output(string):
         if len(string) is 0:
             return None
         else:
@@ -141,7 +149,7 @@ class FuncWorker(object):
 
     @property
     def output(self):
-        return self.__output
+        return self._output
 
     @property
     def rcode(self):

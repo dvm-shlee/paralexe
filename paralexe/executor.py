@@ -1,3 +1,9 @@
+import psutil
+import shlex
+from subprocess import PIPE, Popen
+from io import BytesIO
+
+
 class Executor(object):
     """Executor class, the object to run command hand interface with subprocess
     Helper class for Worker to execute command.
@@ -10,35 +16,40 @@ class Executor(object):
     Todo:
         Update docstrings. Best practice are made on Manager class
     """
-    __wildcards = "?*%$#"
-    def __init__(self, cmd, client=None):
-        self._cmd = cmd
-        self._client = client
-        self._interface = None
-        self._rcode = None
-        self._proc = None
-        self.exit_code = None
-        if client is None:
-            import psutil
-            self._interface = psutil
-        else:
-            self._interface = self._client.open_interface()
+    _wildcards = "?*%$#"
 
+    def __init__(self, cmd, client=None, shell=False):
+        self._cmd       = cmd
+        self._client    = client
+        self._shell = shell
+        self._interface = None
+        self._rcode     = None
+        self._proc      = None
+        self.exit_code  = None
+
+        self._stdout    = None
+        self._stderr    = None
+        self._interface = psutil if client is None else self._client.open_interface()
+
+    @property
     def execute(self):
+        # for backward compatibility
+        return self.run
+
+    def run(self):
         # If client obj is not input, use subprocess
         if self._client is None:
-            from subprocess import PIPE, Popen
-            from io import BytesIO
-            import shlex
             try:
-                if any(w in self._cmd for w in self.__wildcards):
+                if any(w in self._cmd for w in self._wildcards) or self._shell:
                     proc = Popen(self._cmd, stdout=PIPE, stderr=PIPE, shell=True)
                 else:
                     proc = Popen(shlex.split(self._cmd), stdout=PIPE, stderr=PIPE)
                 (stdout, stderr)  = proc.communicate()
+
                 self._stdout = BytesIO(stdout)
                 self._stderr = BytesIO(stderr)
                 self._rcode = proc.returncode
+
             except OSError as e:
                 self._stdout = BytesIO(''.encode('ascii'))
                 self._stderr = BytesIO(e.strerror.encode('ascii'))
@@ -52,7 +63,8 @@ class Executor(object):
             self._stdout = self._proc.stdout
             self._stderr = self._proc.stderr
             self._rcode = self._proc.returncode
-        if self._rcode == None: # TODO: for debugging
+
+        if self._rcode is None: # TODO: for debugging
             raise Exception
 
     @property
@@ -96,3 +108,22 @@ class Executor(object):
     @property
     def pid(self):
         return self.proc.pid
+
+
+if __name__ == '__main__':
+    # testing
+    import sys
+    cmd = 'dir' if sys.platform == 'win32' else 'ls'
+
+    print('Executing command:: "{}"\n'.format(cmd))
+    ex = Executor(cmd, shell=True)
+    ex.run()
+
+    print('STDOUT::')
+    for o in ex.stdout.read().decode('UTF-8').split('\n'):
+        print(o)
+    print('STDERR::')
+    for e in ex.stderr.read().decode('UTF-8').split('\n'):
+        print(e)
+
+    print('Return code:: {}'.format(ex.rcode))
