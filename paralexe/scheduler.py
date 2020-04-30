@@ -1,5 +1,6 @@
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
+from shleeh.errors import *
 
 
 class Scheduler(object):
@@ -45,6 +46,7 @@ class Scheduler(object):
 
         Args:
             mode (str): run process on Thread if 'background', else running foreground.
+            use_label (bool)
         """
         self._submitted = True
 
@@ -52,12 +54,12 @@ class Scheduler(object):
             """Internal function that submitting jobs to Thread object
             The outputs from each worker are collected during running this function"""
             if self._queues is not None:
-                self.__num_steps = len(self._queues)
+                self._num_steps = len(self._queues)
 
                 # initiate pool
                 pool = ThreadPool(self._n_threads)
                 for order in sorted(self._queues.keys()):
-                    if order in self.__succeeded_steps:
+                    if order in self._succeeded_steps:
                         pass
                     else:
                         if use_label is True:
@@ -65,40 +67,39 @@ class Scheduler(object):
                         else:
                             label = order
                         # Initiate counters
-                        self.__incomplete_steps = []
-                        self.__failed_steps = []
-                        self.__succeeded_workers[order] = []
-                        self.__failed_workers[order] = []
-                        self.__stdout_collector[label] = dict()
-                        self.__stderr_collector[label] = dict()
+                        self._incomplete_steps = []
+                        self._failed_steps = []
+                        self._succeeded_workers[order] = []
+                        self._failed_workers[order] = []
+                        self._stdout_collector[label] = dict()
+                        self._stderr_collector[label] = dict()
                         n_work = len(self._queues[order])
-                        self.__total_num_of_workers[order] = n_work
+                        self._total_num_of_workers[order] = n_work
                         workers = self._queues[order]
 
-                        # TODO: to catch the error related to the failed workers (when worker raise an exception)
-                        for id, rcode, output in pool.imap_unordered(self.request, workers):
+                        for idx, rcode, output in pool.imap_unordered(self.request, workers):
                             if rcode == 1:
-                                self.__failed_workers[order].append(id)
+                                self._failed_workers[order].append(idx)
                             elif rcode == 0:
-                                self.__succeeded_workers[order].append(id)
+                                self._succeeded_workers[order].append(idx)
                             else:
                                 import sys
                                 print('unidentified return code: {}'.format(rcode), file=sys.stderr)
-                                raise Exception
+                                raise OSError
                             if use_label is True:
                                 label = self._queues_labels[order]
                             else:
                                 label = order
-                            self.__stdout_collector[label][id] = output[0]
-                            self.__stderr_collector[label][id] = output[1]
+                            self._stdout_collector[label][idx] = output[0]
+                            self._stderr_collector[label][idx] = output[1]
 
-                        if self.__succeeded_workers[order] == 0:
-                            self.__failed_steps.append(order)
+                        if self._succeeded_workers[order] == 0:
+                            self._failed_steps.append(order)
                         else:
-                            if self.__total_num_of_workers[order] > len(self.__succeeded_workers[order]):
-                                self.__incomplete_steps.append(order)
+                            if self._total_num_of_workers[order] > len(self._succeeded_workers[order]):
+                                self._incomplete_steps.append(order)
                             else:
-                                self.__succeeded_steps.append(order)
+                                self._succeeded_steps.append(order)
 
         # Pool will be staying on foreground
         if mode == 'foreground':
@@ -144,17 +145,17 @@ class Scheduler(object):
         """Helper method to check overall progression"""
 
         if self._queues is not None:
-            total_bar = len(self.__succeeded_steps) + len(self.__failed_steps)
-            tqdm(total=self.__num_steps, desc='__Total__', initial=total_bar, postfix=None)
+            total_bar = len(self._succeeded_steps) + len(self._failed_steps)
+            tqdm(total=self._num_steps, desc='__Total__', initial=total_bar, postfix=None)
 
             for priority in self._queues.keys():
                 if len(self._queues_labels) != 0:
                     label = 'Step::{}'.format(self._queues_labels[priority])
                 else:
                     label = 'priority::{}'.format(str(priority + 1).zfill(3))
-                if priority in self.__succeeded_workers.keys():
-                    sub_bar = len(self.__succeeded_workers[priority])
-                    tqdm(total=self.__total_num_of_workers[priority],
+                if priority in self._succeeded_workers.keys():
+                    sub_bar = len(self._succeeded_workers[priority])
+                    tqdm(total=self._total_num_of_workers[priority],
                          desc=label,
                          initial=sub_bar)
                 else:
@@ -165,33 +166,33 @@ class Scheduler(object):
             print('[No scheduled jobs]')
 
     def summary(self):
-        if self.__num_steps != 0:
+        if self._num_steps != 0:
             m = []
-            zfill = len(str(self.__num_steps))
+            zfill = len(str(self._num_steps))
             m.append('outline')
             m.append('\t** Summery')
             m.append('outline')
-            m.append('Total number of steps:\t\t{}'.format(self.__num_steps))
-            if len(self.__succeeded_steps) > 0:
-                m.append('- Succeeded steps:\t\t{}'.format(len(self.__succeeded_steps)))
-            if len(self.__incomplete_steps) > 0:
-                m.append('- Incompleted steps:\t\t{}'.format(len(self.__incomplete_steps)))
-            if len(self.__failed_steps) > 0:
-                m.append('- Failed steps:\t\t\t{}'.format(len(self.__failed_steps)))
+            m.append('Total number of steps:\t\t{}'.format(self._num_steps))
+            if len(self._succeeded_steps) > 0:
+                m.append('- Succeeded steps:\t\t{}'.format(len(self._succeeded_steps)))
+            if len(self._incomplete_steps) > 0:
+                m.append('- Incompleted steps:\t\t{}'.format(len(self._incomplete_steps)))
+            if len(self._failed_steps) > 0:
+                m.append('- Failed steps:\t\t\t{}'.format(len(self._failed_steps)))
             # for s in range(self.__num_steps):
             for s in self._queues.keys():
                 if len(self._queues_labels) == 0:
                     label = 'Step:'.format(str(s + 1).zfill(zfill))
                 else:
                     label = 'Step::{}'.format(self._queues_labels[s])
-                if s in self.__total_num_of_workers.keys():
+                if s in self._total_num_of_workers.keys():
                     m.append('space')
                     m.append('{}\n\tNumber of workers: \t{}'.format(label,
-                                                                    self.__total_num_of_workers[s]))
-                    if len(self.__succeeded_workers[s]) > 0:
-                        m.append('\t- Succeeded workers: \t{}'.format(len(self.__succeeded_workers[s])))
-                    if len(self.__failed_workers[s]) > 0:
-                        m.append('\t- Failed workers: \t{}'.format(len(self.__failed_workers[s])))
+                                                                    self._total_num_of_workers[s]))
+                    if len(self._succeeded_workers[s]) > 0:
+                        m.append('\t- Succeeded workers: \t{}'.format(len(self._succeeded_workers[s])))
+                    if len(self._failed_workers[s]) > 0:
+                        m.append('\t- Failed workers: \t{}'.format(len(self._failed_workers[s])))
                 else:
                     m.append('space')
                     m.append('{}\n- Not ready'.format(label))
@@ -200,30 +201,30 @@ class Scheduler(object):
                 if self.is_alive() is True:
                     state = '\tActive'
                 else:
-                    if len(self.__succeeded_steps) == self.__num_steps:
+                    if len(self._succeeded_steps) == self._num_steps:
                         state = '\tFinished'
-                    elif len(self.__succeeded_steps) < self.__num_steps:
+                    elif len(self._succeeded_steps) < self._num_steps:
                         state = []
-                        if len(self.__failed_steps) > 0:
-                            state.append('\tFailed steps-{}'.format(self.__failed_steps))
-                        if len(self.__incomplete_steps) > 0:
-                            state.append('\tIncompleted steps-{}'.format(self.__incomplete_steps))
+                        if len(self._failed_steps) > 0:
+                            state.append('\tFailed steps-{}'.format(self._failed_steps))
+                        if len(self._incomplete_steps) > 0:
+                            state.append('\tIncompleted steps-{}'.format(self._incomplete_steps))
                         state = ''.join(state)
                     else:
                         state = '\tSubmission needed'
                 m.append('Status:\n{}'.format(state))
             else:
-                if len(self.__succeeded_steps) == self.__num_steps:
+                if len(self._succeeded_steps) == self._num_steps:
                     state = '\tFinished'
-                elif len(self.__succeeded_steps) < self.__num_steps:
+                elif len(self._succeeded_steps) < self._num_steps:
                     state = []
-                    if len(self.__failed_steps) > 0:
-                        state.append('\tFailed steps-{}'.format(self.__failed_steps))
-                    if len(self.__incomplete_steps) > 0:
-                        state.append('\tIncompleted steps-{}'.format(self.__incomplete_steps))
+                    if len(self._failed_steps) > 0:
+                        state.append('\tFailed steps-{}'.format(self._failed_steps))
+                    if len(self._incomplete_steps) > 0:
+                        state.append('\tIncompleted steps-{}'.format(self._incomplete_steps))
                     state = ''.join(state)
                 else:
-                    state = ('\tSubmission needed')
+                    state = '\tSubmission needed'
                 m.append('Status:\n{}'.format(state))
             m.append('outline')
 
@@ -246,7 +247,7 @@ class Scheduler(object):
             self._queues = self._inspect_inputs(workers, priority=0, label=label)
         else:
             workers = self._inspect_inputs(workers, priority)
-            self.__update_queues(workers, label)
+            self._update_queues(workers, label)
 
     def _inspect_inputs(self, workers, priority=None, label=None):
         """Inspect the integrity of the inputs.
@@ -265,18 +266,22 @@ class Scheduler(object):
                 for order, l in self._queues_labels.items():
                     if label is l:
                         label_index = order
-            if label_index in self.__succeeded_steps:
+            if label_index in self._succeeded_steps:
                 return {}
-            elif label_index in self.__failed_steps or label_index in self.__incomplete_steps:
+            elif label_index in self._failed_steps or label_index in self._incomplete_steps:
                 priority = label_index
                 try:
-                    self.__failed_steps.remove(label_index)
-                except:
+                    self._failed_steps.remove(label_index)
+                except ValueError:
                     pass
+                except:
+                    raise UnexpectedError
                 try:
-                    self.__incomplete_steps.remove(label_index)
-                except:
+                    self._incomplete_steps.remove(label_index)
+                except ValueError:
                     pass
+                except:
+                    raise UnexpectedError
             else:
                 pass
 
@@ -292,9 +297,9 @@ class Scheduler(object):
         if isinstance(workers, list):
             for ipt in workers:
                 if not any([isinstance(ipt, Worker), isinstance(ipt, FuncWorker)]):
-                    raise Exception
+                    raise TypeError
             self._queues_labels[priority] = label
-            return {priority:workers}
+            return {priority: workers}
 
         # dictionary type of workers may have multiple workers list.
         elif isinstance(workers, dict):
@@ -302,9 +307,9 @@ class Scheduler(object):
                 self._queues_labels[p] = label
             return workers
         else:
-            raise Exception
+            raise TypeError
 
-    def __update_queues(self, workers, label):
+    def _update_queues(self, workers, label):
         """internal method to update workers into queue"""
         if len(workers) > 0:
             for priority, workers_in_priority in workers.items():
@@ -320,19 +325,19 @@ class Scheduler(object):
 
     def _reset_counter(self):
         # counter for steps
-        self.__num_steps            = 0
-        self.__succeeded_steps      = []
-        self.__failed_steps         = []
-        self.__incomplete_steps     = []
+        self._num_steps            = 0
+        self._succeeded_steps      = []
+        self._failed_steps         = []
+        self._incomplete_steps     = []
 
         # counter for workers
-        self.__total_num_of_workers = {}
-        self.__failed_workers       = {}
-        self.__succeeded_workers    = {}
+        self._total_num_of_workers = {}
+        self._failed_workers       = {}
+        self._succeeded_workers    = {}
 
         # output collector
-        self.__stdout_collector     = {}
-        self.__stderr_collector     = {}
+        self._stdout_collector     = {}
+        self._stderr_collector     = {}
 
     @property
     def queues(self):
@@ -340,13 +345,14 @@ class Scheduler(object):
 
     @property
     def stdout(self):
-        return self.__stdout_collector
+        return self._stdout_collector
 
     @property
     def stderr(self):
-        return self.__stderr_collector
+        return self._stderr_collector
 
     def __repr__(self):
-        return 'Scheduled Job:{}::{}'.format(self.__num_steps,
-                                             'Completed' if self.__num_steps \
-                                                 else 'Issued' if len(self.__incomplete_steps) > 0 else 'Incompleted')
+        return 'Scheduled Job:{}::{}'.format(self._num_steps,
+                                             'Completed' if self._num_steps
+                                             else 'Issued' if len(self._incomplete_steps) > 0
+                                             else 'Incompleted')

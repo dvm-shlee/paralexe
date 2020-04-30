@@ -1,5 +1,6 @@
 from collections import Iterable
 from .scheduler import Scheduler
+from shleeh.errors import *
 
 
 class Manager(object):
@@ -31,9 +32,6 @@ class Manager(object):
         args (:obj:'dict'): the arguments for command.
         meta (:obj:'dict'): the meta information for followup the workers.
         decorator (:obj:'list' of :obj:'str'): decorator for place holder in command.
-
-    Todo:
-        Make the better descriptions for Errors and Exceptions.
     """
     def __init__(self, client=None):
         # private
@@ -89,7 +87,7 @@ class Manager(object):
         """
         if self._cmd is None:
             # the cmd property need to be defined prior to run this method.
-            raise Exception()
+            raise InvalidApproach
 
         # inspect the integrity of input argument.
         self._args[label] = self._inspection(args)
@@ -104,7 +102,7 @@ class Manager(object):
             # update meta information.
             for i, arg in enumerate(self._args[k]):
                 if update_meta is True:
-                    self.meta[i] = {k:arg}
+                    self.meta[i] = {k: arg}
                 else:
                     self.meta[i] = None
 
@@ -130,7 +128,7 @@ class Manager(object):
         elif isinstance(scheduler, Scheduler):
             self._schd = scheduler
         else:
-            raise Exception
+            raise InvalidApproach
         self._workers = self.deploy_jobs()
         self._schd.queue(self._workers, priority=priority, label=label)
 
@@ -161,7 +159,7 @@ class Manager(object):
             """
             if isinstance(arg, Iterable):
                 if not isinstance(arg, str):
-                    raise Exception
+                    raise InvalidApproach
 
         # If there is no preset argument
         if len(self._args.keys()) == 0:
@@ -189,11 +187,11 @@ class Manager(object):
                 # check all arguments as same length
                 if not all([n == max(num_args) for n in num_args]):
                     # the number of each preset argument is different.
-                    raise Exception
+                    raise InvalidApproach
 
                 # the number of arguments are same as others preset
                 if len(args) != max(num_args):
-                    raise Exception
+                    raise InvalidApproach
                 else:
                     self._n_workers = len(args)
                     return args
@@ -207,10 +205,12 @@ class Manager(object):
                 try:
                     stdout = '\n   '.join(w.output[0]) if isinstance(w.output[0], list) else None
                     stderr = '\n   '.join(w.output[1]) if isinstance(w.output[1], list) else None
-                    msg.append('  ReturnCode: {}'.format(w._rcode))
+                    msg.append('  ReturnCode: {}'.format(w.rcode))
                     msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
-                except:
+                except TypeError:
                     msg.append('  *[ Scheduled job is not executed yet. ]\n')
+                except:
+                    raise UnexpectedError
             if len(msg) == 0:
                 print('*[ No workers deployed. ]*')
             print('\n'.join(msg))
@@ -292,14 +292,14 @@ class JobAllocator(object):
         """Hidden method to retrieve name of place holder from the command"""
         import re
         prefix, suffix = self._mng.decorator
-        raw_prefix = ''.join([r'\{}'.format(chr) for chr in prefix])
-        raw_suffix = ''.join([r'\{}'.format(chr) for chr in suffix])
+        raw_prefix = ''.join([r'\{}'.format(c) for c in prefix])
+        raw_suffix = ''.join([r'\{}'.format(c) for c in suffix])
 
         # The text
         p = re.compile(r"{0}[^{0}{1}]+{1}".format(raw_prefix, raw_suffix))
         place_holders = set([obj[len(prefix):-len(suffix)] for obj in p.findall(command)])
 
-        p = re.compile(r"{}({}){}".format(raw_prefix,'|'.join(place_holders), raw_suffix))
+        p = re.compile(r"{}({}){}".format(raw_prefix, '|'.join(place_holders), raw_suffix))
         new_command = p.sub(r'{\1}', command)
 
         return new_command, place_holders
@@ -322,7 +322,7 @@ class JobAllocator(object):
         in argument, this method check the integrity of the given relationship between cmd and args
         """
         if set(args.keys()) != place_holders:
-            raise Exception
+            raise KeyError
 
     def allocation(self):
         """Method to allocate workers and return the list of worker"""
@@ -357,7 +357,7 @@ class FuncManager(object):
     def set_arg(self, label, args):
         if self._func is None:
             # the cmd property need to be defined prior to run this method.
-            raise Exception()
+            raise InvalidApproach
 
         # inspect the integrity of input argument.
         self._args[label] = self._inspection(args)
@@ -374,7 +374,7 @@ class FuncManager(object):
         def if_single_arg(arg):
             if isinstance(arg, Iterable):
                 if not isinstance(arg, str):
-                    raise Exception
+                    raise InvalidApproach
 
         # If there is no preset argument
         if len(self._args.keys()) == 0:
@@ -402,11 +402,11 @@ class FuncManager(object):
                 # check all arguments as same length
                 if not all([n == max(num_args) for n in num_args]):
                     # the number of each preset argument is different.
-                    raise Exception
+                    raise InvalidApproach
 
                 # the number of arguments are same as others preset
                 if len(args) != max(num_args):
-                    raise Exception
+                    raise InvalidApproach
                 else:
                     self._n_workers = len(args)
                     return args
@@ -422,7 +422,7 @@ class FuncManager(object):
         elif isinstance(scheduler, Scheduler):
             self._schd = scheduler
         else:
-            raise Exception
+            raise TypeError
         self._workers = self.deploy_jobs()
         self._schd.queue(self._workers, priority=priority, label=label)
 
@@ -441,8 +441,10 @@ class FuncManager(object):
                     stderr = '\n   '.join(w.output[1]) if isinstance(w.output[1], list) else None
                     msg.append('  ReturnCode: {}'.format(w.rcode))
                     msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
-                except:
+                except TypeError:
                     msg.append('  *[ Scheduled job is not executed yet. ]\n')
+                except:
+                    raise UnexpectedError
             if len(msg) == 0:
                 print('*[ No workers deployed. ]*')
             print('\n'.join(msg))
@@ -478,7 +480,7 @@ class FuncAllocator(object):
     @staticmethod
     def _inspection_func(args, keywords):
         if set(args.keys()) != set(keywords):
-            raise Exception
+            raise KeyError
 
     def _get_kwargslist(self):
         args = self._mng.args

@@ -3,9 +3,7 @@
 Paralexe (PARALlel EXEcution)
 """
 from distutils.core import setup
-# from distutils.extension import Extension
 from setuptools import find_packages
-# from Cython.Distutils import build_ext
 import re, io
 
 __version__ = re.search(
@@ -26,27 +24,17 @@ setup(name='Paralexe',
       packages=find_packages(),
       install_requires=['tqdm',
                         'psutil>=5.7.0',
-                       ],
+                        ],
       # scripts=['',
       #         ],
       classifiers=[
-            # How mature is this project? Common values are
-            #  3 - Alpha
-            #  4 - Beta
-            #  5 - Production/Stable
-            'Development Status :: 4 - Beta',
-
-            # Indicate who your project is intended for
+            'Development Status :: 5 - Production/Stable',
             'Framework :: Jupyter',
             'Intended Audience :: Science/Research',
             'Topic :: Scientific/Engineering :: Information Analysis',
             'Natural Language :: English',
-
-            # Specify the Python version you support here. In particular, ensure
-            # that you indicate whether you support Python 2, Python 3 or both
             'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3.7',
       ],
-      keywords = 'Python Neural-Signal Processing'
-
-     )
+      keywords='Parallel Execution'
+      )
