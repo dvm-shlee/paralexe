@@ -24,6 +24,7 @@ setup(name='Paralexe',
       packages=find_packages(),
       install_requires=['tqdm',
                         'psutil>=5.7.0',
+                        'shleeh>=0.0.4'
                         ],
       # scripts=['',
       #         ],
