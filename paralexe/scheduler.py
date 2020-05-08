@@ -1,6 +1,22 @@
 from multiprocessing.pool import ThreadPool
-from tqdm import tqdm
 from shleeh.errors import *
+import time
+
+try:
+    from IPython import get_ipython
+    if get_ipython() and len(get_ipython().config.keys()):
+        notebook_env = True
+    else:
+        notebook_env = False
+except ModuleNotFoundError:
+    notebook_env = False
+
+if notebook_env:
+    from tqdm import tqdm_notebook as progressbar
+    from IPython.display import display
+else:
+    from pprint import pprint as display
+    from tqdm import tqdm as progressbar
 
 
 class Scheduler(object):
@@ -29,6 +45,8 @@ class Scheduler(object):
         self._background_binder = None
         self._n_threads = n_threads
         self._submitted = False
+        self._step_progressbar = None
+        self._sub_progressbars = dict()
 
         if workers is not None:
             self.queue(workers, label=label)
@@ -63,7 +81,7 @@ class Scheduler(object):
                         pass
                     else:
                         if use_label is True:
-                            label = self._queues_labels[order]
+                            label = f'{self._queues_labels[order]}_{order}'
                         else:
                             label = order
                         # Initiate counters
@@ -86,10 +104,6 @@ class Scheduler(object):
                                 import sys
                                 print('unidentified return code: {}'.format(rcode), file=sys.stderr)
                                 raise OSError
-                            if use_label is True:
-                                label = self._queues_labels[order]
-                            else:
-                                label = order
                             self._stdout_collector[label][idx] = output[0]
                             self._stderr_collector[label][idx] = output[1]
 
@@ -143,25 +157,53 @@ class Scheduler(object):
 
     def check_progress(self):
         """Helper method to check overall progression"""
-
+        self._step_progressbar = None
+        self._sub_progressbars = dict()
         if self._queues is not None:
             total_bar = len(self._succeeded_steps) + len(self._failed_steps)
-            tqdm(total=self._num_steps, desc='__Total__', initial=total_bar, postfix=None)
-
-            for priority in self._queues.keys():
+            sub_bars = dict()
+            import sys
+            self._step_progressbar = progressbar(total=self._num_steps, desc='__Total__',
+                                                 initial=total_bar, postfix=None, position=0)
+            for i, priority in enumerate(self._queues.keys()):
                 if len(self._queues_labels) != 0:
-                    label = 'Step::{}'.format(self._queues_labels[priority])
+                    label = 'Step::{}-{}'.format(self._queues_labels[priority], priority)
                 else:
                     label = 'priority::{}'.format(str(priority + 1).zfill(3))
                 if priority in self._succeeded_workers.keys():
                     sub_bar = len(self._succeeded_workers[priority])
-                    tqdm(total=self._total_num_of_workers[priority],
-                         desc=label,
-                         initial=sub_bar)
                 else:
-                    tqdm(total=len(self._queues[priority]),
-                         desc=label,
-                         initial=0)
+                    sub_bar = 0
+                self._sub_progressbars[priority] = progressbar(total=len(self._queues[priority]),
+                                                               desc=label, initial=sub_bar, position=1+i)
+                sub_bars[priority] = sub_bar
+
+            def workon(n_finished_steps, n_sub_tasks):
+                while n_finished_steps < self._num_steps:
+                    cur_finished_steps = len(self._succeeded_steps) + len(self._failed_steps)
+                    step_delta = cur_finished_steps - n_finished_steps
+                    if step_delta > 0:
+                        n_finished_steps += step_delta
+                        self._step_progressbar.update(step_delta)
+                    for p in self._queues.keys():
+                        if p in self._succeeded_workers.keys():
+                            sub_delta = len(self._succeeded_workers[p]) - n_sub_tasks[p]
+                            if sub_delta > 0:
+                                n_sub_tasks[p] += sub_delta
+                                self._sub_progressbars[p].update(sub_delta)
+                    time.sleep(0.2)
+                self._step_progressbar.close()
+                for p in self._queues.keys():
+                    self._sub_progressbars[p].close()
+            import threading
+            thread = threading.Thread(target=workon, args=(total_bar, sub_bars))
+            if notebook_env:
+                display(self._step_progressbar)
+                for p in self._queues.keys():
+                    display(self._sub_progressbars['sub'][p])
+                thread.start()
+            else:
+                thread.start()
         else:
             print('[No scheduled jobs]')
 
@@ -352,7 +394,7 @@ class Scheduler(object):
         return self._stderr_collector
 
     def __repr__(self):
-        return 'Scheduled Job:{}::{}'.format(self._num_steps,
-                                             'Completed' if self._num_steps
+        return 'Job Scheduling:{}::{}'.format(self._num_steps,
+                                             'Success' if self._num_steps
                                              else 'Issued' if len(self._incomplete_steps) > 0
                                              else 'Incompleted')

@@ -208,7 +208,7 @@ class Manager(object):
                     msg.append('  ReturnCode: {}'.format(w.rcode))
                     msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
                 except TypeError:
-                    msg.append('  *[ Scheduled job is not executed yet. ]\n')
+                    msg.append('  *[ Scheduled job is not processed yet. ]\n')
                 except:
                     raise UnexpectedError
             if len(msg) == 0:
@@ -442,7 +442,7 @@ class FuncManager(object):
                     msg.append('  ReturnCode: {}'.format(w.rcode))
                     msg.append('  stdout:\n    {}\n  stderr:\n    {}\n'.format(stdout, stderr))
                 except TypeError:
-                    msg.append('  *[ Scheduled job is not executed yet. ]\n')
+                    msg.append('  *[ Scheduled job is not processed yet. ]\n')
                 except:
                     raise UnexpectedError
             if len(msg) == 0:

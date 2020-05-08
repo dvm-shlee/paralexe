@@ -1,5 +1,6 @@
 import psutil
 import shlex
+from sys import platform
 from subprocess import PIPE, Popen
 from io import BytesIO
 
@@ -43,7 +44,10 @@ class Executor(object):
                 if any(w in self._cmd for w in self._wildcards) or self._shell:
                     proc = Popen(self._cmd, stdout=PIPE, stderr=PIPE, shell=True)
                 else:
-                    proc = Popen(shlex.split(self._cmd), stdout=PIPE, stderr=PIPE)
+                    if platform == 'win32':
+                        proc = Popen(self._cmd, stdout=PIPE, stderr=PIPE, shell=True)
+                    else:
+                        proc = Popen(shlex.split(self._cmd), stdout=PIPE, stderr=PIPE)
                 (stdout, stderr)  = proc.communicate()
 
                 self._stdout = BytesIO(stdout)
