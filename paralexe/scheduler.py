@@ -200,7 +200,7 @@ class Scheduler(object):
             if notebook_env:
                 display(self._step_progressbar)
                 for p in self._queues.keys():
-                    display(self._sub_progressbars['sub'][p])
+                    display(self._sub_progressbars[p])
                 thread.start()
             else:
                 thread.start()

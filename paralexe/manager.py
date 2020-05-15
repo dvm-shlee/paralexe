@@ -469,8 +469,7 @@ class FuncManager(object):
         return self.schd.summary()
 
     def __repr__(self):
-        return 'Deployed Workers:[{}]{}'.format(self._n_workers,
-                                                '::Submitted' if self._schd.submitted else '')
+        return 'Deployed Workers:[{}]{}'.format(self._n_workers, '::Submitted' if self._schd.submitted else '')
 
 
 class FuncAllocator(object):
@@ -480,12 +479,12 @@ class FuncAllocator(object):
     @staticmethod
     def _inspection_func(args, keywords):
         if set(args.keys()) != set(keywords):
-            raise KeyError
+            raise KeyError(f'{set(args.keys()), set(keywords)}')
 
     def _get_kwargslist(self):
         args = self._mng.args
-        n_args = self._mng.func.__code__.co_argcount
-        keywords = self._mng.func.__code__.co_varnames[:n_args]
+        n_args = self._mng._func.__code__.co_argcount
+        keywords = self._mng._func.__code__.co_varnames[:n_args]
         keywords = [k for k in keywords if k not in ['stdout', 'stderr']]
         self._inspection_func(args, keywords)
         kwargs = dict()
@@ -500,6 +499,6 @@ class FuncAllocator(object):
         list_of_workers = []
         for i, k in kwargs.items():
             list_of_workers.append(FuncWorker(id=i,
-                                              funcobj=self._mng.func,
+                                              funcobj=self._mng._func,
                                               kwargs=k))
         return list_of_workers
