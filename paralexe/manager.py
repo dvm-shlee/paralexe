@@ -266,7 +266,7 @@ class Manager(object):
         return self._schd
 
     def summary(self):
-        return self.schd.summary()
+        return self.schd.info()
 
     def __repr__(self):
         return 'Deployed Workers:[{}]{}'.format(self._n_workers,
@@ -360,16 +360,14 @@ class FuncManager(object):
             raise InvalidApproach
 
         # inspect the integrity of input argument.
-        self._args[label] = self._inspection(args)
-
-        # update arguments to correct numbers.
-        for k, v in self._args.items():
-            if not isinstance(v, list):
-                self._args[k] = [v] * self._n_workers
-            else:
-                self._args[k] = v
+        argv, need_multiply_by_num_worker = self._inspection(args)
+        if need_multiply_by_num_worker:
+            self._args[label] = [argv] * self._n_workers
+        else:
+            self._args[label] = argv
 
     def _inspection(self, args):
+        # TODO: this will convert all to string, need to be corrected.
         # function to check single argument case
         def if_single_arg(arg):
             if isinstance(arg, Iterable):
@@ -378,6 +376,7 @@ class FuncManager(object):
 
         # If there is no preset argument
         if len(self._args.keys()) == 0:
+            # this will be input dataset
             # list dtype
             if isinstance(args, list):
                 self._n_workers = len(args)
@@ -387,14 +386,14 @@ class FuncManager(object):
                 # Only single value can be assign as argument if it is not list object
                 if_single_arg(args)
                 self._n_workers = 1
-            return args
+            return args, False
 
         # If there were any preset argument
         else:
             # is single argument, single argument is allowed.
             if not isinstance(args, list):
                 if_single_arg(args)
-                return args
+                return args, True
             else:
                 # filter only list arguments.
                 num_args = [len(a) for a in self._args.values() if isinstance(a, list)]
@@ -406,10 +405,11 @@ class FuncManager(object):
 
                 # the number of arguments are same as others preset
                 if len(args) != max(num_args):
-                    raise InvalidApproach
+                    # list type argument
+                    return args, True
                 else:
                     self._n_workers = len(args)
-                    return args
+                    return args, False
 
     def deploy_jobs(self):
         self.deployed = True
@@ -466,7 +466,7 @@ class FuncManager(object):
         return self._schd
 
     def summary(self):
-        return self.schd.summary()
+        return self.schd.info()
 
     def __repr__(self):
         return 'Deployed Workers:[{}]{}'.format(self._n_workers, '::Submitted' if self._schd.submitted else '')
