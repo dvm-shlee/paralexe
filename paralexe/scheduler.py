@@ -75,45 +75,46 @@ class Scheduler(object):
                 self._num_steps = len(self._queues)
 
                 # initiate pool
-                pool = ThreadPool(self._n_threads)
-                for order in sorted(self._queues.keys()):
-                    if order in self._succeeded_steps:
-                        pass
-                    else:
-                        if use_label is True:
-                            label = f'{self._queues_labels[order]}_{order}'
+                with ThreadPool(self._n_threads) as pool:
+                # pool = ThreadPool(self._n_threads)
+                    for order in sorted(self._queues.keys()):
+                        if order in self._succeeded_steps:
+                            pass
                         else:
-                            label = order
-                        # Initiate counters
-                        self._incomplete_steps = []
-                        self._failed_steps = []
-                        self._succeeded_workers[order] = []
-                        self._failed_workers[order] = []
-                        self._stdout_collector[label] = dict()
-                        self._stderr_collector[label] = dict()
-                        n_work = len(self._queues[order])
-                        self._total_num_of_workers[order] = n_work
-                        workers = self._queues[order]
-
-                        for idx, rcode, output in pool.imap_unordered(self.request, workers):
-                            if rcode == 1:
-                                self._failed_workers[order].append(idx)
-                            elif rcode == 0:
-                                self._succeeded_workers[order].append(idx)
+                            if use_label is True:
+                                label = f'{self._queues_labels[order]}_{order}'
                             else:
-                                import sys
-                                print('unidentified return code: {}'.format(rcode), file=sys.stderr)
-                                raise OSError
-                            self._stdout_collector[label][idx] = output[0]
-                            self._stderr_collector[label][idx] = output[1]
+                                label = order
+                            # Initiate counters
+                            self._incomplete_steps = []
+                            self._failed_steps = []
+                            self._succeeded_workers[order] = []
+                            self._failed_workers[order] = []
+                            self._stdout_collector[label] = dict()
+                            self._stderr_collector[label] = dict()
+                            n_work = len(self._queues[order])
+                            self._total_num_of_workers[order] = n_work
+                            workers = self._queues[order]
 
-                        if self._succeeded_workers[order] == 0:
-                            self._failed_steps.append(order)
-                        else:
-                            if self._total_num_of_workers[order] > len(self._succeeded_workers[order]):
-                                self._incomplete_steps.append(order)
+                            for idx, rcode, output in pool.imap_unordered(self.request, workers):
+                                if rcode == 1:
+                                    self._failed_workers[order].append(idx)
+                                elif rcode == 0:
+                                    self._succeeded_workers[order].append(idx)
+                                else:
+                                    import sys
+                                    print('unidentified return code: {}'.format(rcode), file=sys.stderr)
+                                    raise OSError
+                                self._stdout_collector[label][idx] = output[0]
+                                self._stderr_collector[label][idx] = output[1]
+
+                            if self._succeeded_workers[order] == 0:
+                                self._failed_steps.append(order)
                             else:
-                                self._succeeded_steps.append(order)
+                                if self._total_num_of_workers[order] > len(self._succeeded_workers[order]):
+                                    self._incomplete_steps.append(order)
+                                else:
+                                    self._succeeded_steps.append(order)
 
         # Pool will be staying on foreground
         if mode == 'foreground':
@@ -197,6 +198,7 @@ class Scheduler(object):
                     self._sub_progressbars[p].close()
             import threading
             thread = threading.Thread(target=workon, args=(total_bar, sub_bars))
+            thread.daemon = True
             if notebook_env:
                 display(self._step_progressbar)
                 for p in self._queues.keys():

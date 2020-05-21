@@ -269,6 +269,8 @@ class Manager(object):
         return self.schd.info()
 
     def __repr__(self):
+        if self._schd  is None:
+            return 'Not Ready'
         return 'Deployed Workers:[{}]{}'.format(self._n_workers,
                                                 '::Submitted' if self._schd.submitted else '')
 
@@ -469,6 +471,8 @@ class FuncManager(object):
         return self.schd.info()
 
     def __repr__(self):
+        if self._schd  is None:
+            return 'Not Ready'
         return 'Deployed Workers:[{}]{}'.format(self._n_workers, '::Submitted' if self._schd.submitted else '')
 
 
