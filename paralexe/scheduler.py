@@ -76,7 +76,6 @@ class Scheduler(object):
 
                 # initiate pool
                 with ThreadPool(self._n_threads) as pool:
-                # pool = ThreadPool(self._n_threads)
                     for order in sorted(self._queues.keys()):
                         if order in self._succeeded_steps:
                             pass
