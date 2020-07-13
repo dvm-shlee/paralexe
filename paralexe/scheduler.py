@@ -1,4 +1,4 @@
-from multiprocessing.pool import ThreadPool
+from multiprocessing.pool import Pool
 from shleeh.errors import *
 import time
 
@@ -75,7 +75,7 @@ class Scheduler(object):
                 self._num_steps = len(self._queues)
 
                 # initiate pool
-                with ThreadPool(self._n_threads) as pool:
+                with Pool(self._n_threads) as pool:
                     for order in sorted(self._queues.keys()):
                         if order in self._succeeded_steps:
                             pass
