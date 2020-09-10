@@ -47,7 +47,7 @@ class Scheduler(object):
         self._submitted = False
         self._step_progressbar = None
         self._sub_progressbars = dict()
-        self._func_worker = True
+        self._Pool = None
 
         if workers is not None:
             self.queue(workers, label=label)
@@ -68,10 +68,6 @@ class Scheduler(object):
             use_label (bool)
         """
         self._submitted = True
-        if self._func_worker:
-            Pool_slt = Pool
-        else:
-            Pool_slt = ThreadPool
 
         def workflow():
             """Internal function that submitting jobs to Thread object
@@ -80,7 +76,7 @@ class Scheduler(object):
                 self._num_steps = len(self._queues)
 
                 # initiate pool
-                with Pool_slt(self._n_threads) as pool:
+                with self._Pool(self._n_threads) as pool:
                     for order in sorted(self._queues.keys()):
                         if order in self._succeeded_steps:
                             pass
@@ -291,6 +287,13 @@ class Scheduler(object):
         """Queue the input list of workers"""
 
         # run inspection, if the input of worker instances is list, this step change it to dictionary.
+
+        from .worker import Worker, FuncWorker
+        if isinstance(workers[0], Worker):
+            self._Pool = ThreadPool
+        else:
+            self._Pool = Pool
+
         if self._queues is None:
             self._queues = self._inspect_inputs(workers, priority=0, label=label)
         else:
@@ -346,8 +349,6 @@ class Scheduler(object):
             for ipt in workers:
                 if not any([isinstance(ipt, Worker), isinstance(ipt, FuncWorker)]):
                     raise TypeError
-                if isinstance(ipt, FuncWorker):
-                    self._func_worker = True
             self._queues_labels[priority] = label
             return {priority: workers}
 
