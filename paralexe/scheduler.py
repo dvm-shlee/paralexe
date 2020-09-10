@@ -1,4 +1,4 @@
-from multiprocessing.pool import Pool
+from multiprocessing.pool import Pool, ThreadPool
 from shleeh.errors import *
 import time
 
@@ -47,6 +47,7 @@ class Scheduler(object):
         self._submitted = False
         self._step_progressbar = None
         self._sub_progressbars = dict()
+        self._func_worker = True
 
         if workers is not None:
             self.queue(workers, label=label)
@@ -67,6 +68,10 @@ class Scheduler(object):
             use_label (bool)
         """
         self._submitted = True
+        if self._func_worker:
+            Pool_slt = Pool
+        else:
+            Pool_slt = ThreadPool
 
         def workflow():
             """Internal function that submitting jobs to Thread object
@@ -75,7 +80,7 @@ class Scheduler(object):
                 self._num_steps = len(self._queues)
 
                 # initiate pool
-                with Pool(self._n_threads) as pool:
+                with Pool_slt(self._n_threads) as pool:
                     for order in sorted(self._queues.keys()):
                         if order in self._succeeded_steps:
                             pass
@@ -341,6 +346,8 @@ class Scheduler(object):
             for ipt in workers:
                 if not any([isinstance(ipt, Worker), isinstance(ipt, FuncWorker)]):
                     raise TypeError
+                if isinstance(ipt, FuncWorker):
+                    self._func_worker = True
             self._queues_labels[priority] = label
             return {priority: workers}
 
