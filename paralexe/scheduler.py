@@ -47,7 +47,7 @@ class Scheduler(object):
         self._submitted = False
         self._step_progressbar = None
         self._sub_progressbars = dict()
-        self._Pool = None
+        self._Pool = ThreadPool
 
         if workers is not None:
             self.queue(workers, label=label)
