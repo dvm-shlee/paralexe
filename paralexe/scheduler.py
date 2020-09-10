@@ -288,11 +288,12 @@ class Scheduler(object):
 
         # run inspection, if the input of worker instances is list, this step change it to dictionary.
 
-        from .worker import Worker, FuncWorker
-        if isinstance(workers[0], Worker):
-            self._Pool = ThreadPool
-        else:
-            self._Pool = Pool
+        if len(workers):
+            from .worker import Worker, FuncWorker
+            if isinstance(workers[0], Worker):
+                self._Pool = ThreadPool
+            else:
+                self._Pool = Pool
 
         if self._queues is None:
             self._queues = self._inspect_inputs(workers, priority=0, label=label)
