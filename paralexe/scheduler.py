@@ -156,7 +156,7 @@ class Scheduler(object):
             self._background_binder.join()
 
     def check_progress(self):
-        """Helper method to check overall progression"""
+        """Helper metrics to check overall progression"""
         self._step_progressbar = None
         self._sub_progressbars = dict()
         if self._queues is not None:
@@ -353,7 +353,7 @@ class Scheduler(object):
             raise TypeError
 
     def _update_queues(self, workers, label):
-        """internal method to update workers into queue"""
+        """internal metrics to update workers into queue"""
         if len(workers) > 0:
             for priority, workers_in_priority in workers.items():
                 if priority in self._queues.keys():

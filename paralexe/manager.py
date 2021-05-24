@@ -7,7 +7,7 @@ class Manager(object):
     """The class to allocate command to workers instance and schedule the job.
 
     This class take input from user and initiate Worker instance with it.
-    The initiated worker instances will be queued on Scheduler after executing 'schedule' method.
+    The initiated worker instances will be queued on Scheduler after executing 'schedule' metrics.
 
     Notes:
         Combining with miresi module, the command can be executed into remote host.
@@ -57,7 +57,7 @@ class Manager(object):
         self._cmd = cmd
 
     def set_errterm(self, error_term):
-        """This method set the term for indicating error condition from stderr
+        """This metrics set the term for indicating error condition from stderr
         """
         if isinstance(error_term, list):
             self._errterm = error_term
@@ -83,10 +83,10 @@ class Manager(object):
             update_meta (bool): Update meta information for this argument if True, else do not update.
 
         Raises:
-            Exception: will be raised if the command is not set prior executing this method.
+            Exception: will be raised if the command is not set prior executing this metrics.
         """
         if self._cmd is None:
-            # the cmd property need to be defined prior to run this method.
+            # the cmd property need to be defined prior to run this metrics.
             raise InvalidApproach
 
         # inspect the integrity of input argument.
@@ -138,8 +138,8 @@ class Manager(object):
 
     def _inspection(self, args):
         """Inspect the integrity of the input arguments.
-        This method mainly check the constancy of the number of arguments
-        and the data type of given argument. Hidden method for internal using.
+        This metrics mainly check the constancy of the number of arguments
+        and the data type of given argument. Hidden metrics for internal using.
 
         Args:
             args (:obj:'list' of :obj:'str'): original arguments.
@@ -291,7 +291,7 @@ class JobAllocator(object):
         self._mng = manager
 
     def _convert_cmd_and_retrieve_placeholder(self, command):
-        """Hidden method to retrieve name of place holder from the command"""
+        """Hidden metrics to retrieve name of place holder from the command"""
         import re
         prefix, suffix = self._mng.decorator
         raw_prefix = ''.join([r'\{}'.format(c) for c in prefix])
@@ -307,7 +307,7 @@ class JobAllocator(object):
         return new_command, place_holders
 
     def _get_cmdlist(self):
-        """Hidden method to generate list of command need to be executed by Workers"""
+        """Hidden metrics to generate list of command need to be executed by Workers"""
 
         args = self._mng.args
         cmd, place_holders = self._convert_cmd_and_retrieve_placeholder(self._mng.cmd)
@@ -319,9 +319,9 @@ class JobAllocator(object):
 
     @staticmethod
     def _inspection_cmd(args, place_holders):
-        """Hidden method to inspect command.
+        """Hidden metrics to inspect command.
         There is the chance that the place holder user provided is not match with label
-        in argument, this method check the integrity of the given relationship between cmd and args
+        in argument, this metrics check the integrity of the given relationship between cmd and args
         """
         if set(args.keys()) != place_holders:
             raise KeyError
@@ -358,7 +358,7 @@ class FuncManager(object):
 
     def set_arg(self, label, args):
         if self._func is None:
-            # the cmd property need to be defined prior to run this method.
+            # the cmd property need to be defined prior to run this metrics.
             raise InvalidApproach
 
         # inspect the integrity of input argument.
