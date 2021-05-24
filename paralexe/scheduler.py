@@ -1,4 +1,4 @@
-from multiprocessing.pool import Pool
+from multiprocessing.pool import Pool, ThreadPool
 from shleeh.errors import *
 import time
 
@@ -47,6 +47,7 @@ class Scheduler(object):
         self._submitted = False
         self._step_progressbar = None
         self._sub_progressbars = dict()
+        self._Pool = ThreadPool
 
         if workers is not None:
             self.queue(workers, label=label)
@@ -75,7 +76,7 @@ class Scheduler(object):
                 self._num_steps = len(self._queues)
 
                 # initiate pool
-                with Pool(self._n_threads) as pool:
+                with self._Pool(self._n_threads) as pool:
                     for order in sorted(self._queues.keys()):
                         if order in self._succeeded_steps:
                             pass
@@ -286,6 +287,14 @@ class Scheduler(object):
         """Queue the input list of workers"""
 
         # run inspection, if the input of worker instances is list, this step change it to dictionary.
+
+        if len(workers):
+            from .worker import Worker, FuncWorker
+            if isinstance(workers[0], Worker):
+                self._Pool = ThreadPool
+            else:
+                self._Pool = Pool
+
         if self._queues is None:
             self._queues = self._inspect_inputs(workers, priority=0, label=label)
         else:
