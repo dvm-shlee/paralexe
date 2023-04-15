@@ -1,4 +1,15 @@
-from collections import Iterable
+import sys
+python_v_major = sys.version_info.major
+python_v_minor = sys.version_info.minor
+
+if python_v_major != 3:
+    raise Exception('python version not compatible')
+else:
+    if python_v_minor < 10:
+        from collections import Iterable
+    else:
+        from collections.abc import Iterable
+        
 from .scheduler import Scheduler
 from shleeh.errors import *
 
